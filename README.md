@@ -6,6 +6,10 @@
 
 <p align="center" style="text-align: center; font-size: 16px;">Convert JSON and XML files to TOON, a schema-aware data formatting for LLM prompts.</p>
 
+> [!IMPORTANT]
+> The original author of the TOON data formatting is xxx and an implementation of a TOON conversion system in Python already exists (https://github.com/toon-format/toon-python). This serves as a more thorough implementation of the package.
+
+
 ## Table of Contents
 
 - [Why Toon?](#why-toon)
