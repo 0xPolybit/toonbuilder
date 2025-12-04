@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="banner.png" alt="toonbuilder banner" style="display: block; margin-left: auto; margin-right: auto;margin-top: 15px; margin-bottom: 20px; height: 250px;">
+    <img src="https://raw.githubusercontent.com/0xPolybit/toonbuilder/main/banner.png" alt="toonbuilder banner" style="display: block; margin-left: auto; margin-right: auto;margin-top: 15px; margin-bottom: 20px; height: 250px;">
 </p>
 
 <h1 align="center" style="text-align: center; font-size: 35px; font-weight: 700;">toonbuilder</h1>
