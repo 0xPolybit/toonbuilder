@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toonbuilder"
-version = "0.1.1"
+version = "0.2.0"
 authors = [
   { name="Polybit" },
 ]
-description = "Convert JSON and XML files to TOON, a schema-aware data formatting for LLM prompts."
+description = "Convert JSON, XML, and TOML data to TOON, a schema-aware data format for LLM prompts."
 readme = "README.md"
 requires-python = ">=3.7"
 classifiers = [
@@ -17,6 +17,19 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[project.optional-dependencies]
+# TOML parsing uses the stdlib `tomllib` on Python 3.11+; the `toml` package is
+# needed on older Pythons and for serialising TOON back to TOML.
+toml = ["toml"]
+test = ["pytest"]
+
 [project.urls]
 "Homepage" = "https://github.com/0xPolybit/toonbuilder"
 "Bug Tracker" = "https://github.com/0xPolybit/toonbuilder/issues"
+
+[tool.setuptools.packages.find]
+include = ["toonbuilder*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
