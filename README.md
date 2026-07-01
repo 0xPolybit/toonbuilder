@@ -1,60 +1,68 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/0xPolybit/toonbuilder/main/banner.png" alt="toonbuilder banner" style="display: block; margin-left: auto; margin-right: auto;margin-top: 15px; margin-bottom: 20px; height: 250px;">
+    <img src="https://raw.githubusercontent.com/0xPolybit/toonbuilder/main/banner.png" alt="toonbuilder banner" height="250">
 </p>
 
-<h1 align="center" style="text-align: center; font-size: 35px; font-weight: 700;">toonbuilder</h1>
+<h1 align="center">toonbuilder</h1>
 
-<p align="center" style="text-align: center; font-size: 16px;">Convert JSON and XML files to TOON, a schema-aware data formatting for LLM prompts.</p>
+<p align="center">
+    Convert JSON, XML, and TOML data to <strong>TOON</strong> — a schema-aware, token-efficient data format for LLM prompts — and back.
+</p>
 
-> [!IMPORTANT]
-> The original author of the TOON data formatting is xxx and an implementation of a TOON conversion system in Python already exists (https://github.com/toon-format/toon-python). This serves as a more thorough implementation of the package.
+<p align="center">
+    <a href="https://pypi.org/project/toonbuilder/"><img src="https://img.shields.io/pypi/v/toonbuilder.svg?color=blue" alt="PyPI version"></a>
+    <a href="https://pypi.org/project/toonbuilder/"><img src="https://img.shields.io/pypi/pyversions/toonbuilder.svg" alt="Python versions"></a>
+    <a href="https://github.com/0xPolybit/toonbuilder/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
+    <a href="https://pypi.org/project/toonbuilder/"><img src="https://img.shields.io/pypi/dm/toonbuilder.svg?color=orange" alt="Downloads"></a>
+    <a href="https://github.com/0xPolybit/toonbuilder/stargazers"><img src="https://img.shields.io/github/stars/0xPolybit/toonbuilder.svg?style=social" alt="GitHub stars"></a>
+</p>
 
+> [!NOTE]
+> The **TOON** format was created by [Johann Schopplich](https://github.com/toon-format/toon), and an official Python implementation is available at [toon-format/toon-python](https://github.com/toon-format/toon-python). `toonbuilder` is an independent implementation that additionally provides first-class **XML** and **TOML** conversion.
+
+---
 
 ## Table of Contents
 
-- [Why Toon?](#why-toon)
+- [Why TOON?](#why-toon)
+- [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Usage](#usage)
+- [Type Handling](#type-handling)
 - [API Reference](#api-reference)
+- [Examples](#examples)
 - [Contributing](#contributing)
+- [FAQ](#faq)
+- [Acknowledgments](#acknowledgments)
 - [License](#license)
 
-## Why Toon?
+## Why TOON?
 
-**TOON (Token-Oriented Object Notation)** is a compact, human-readable data format specifically designed to minimize token usage in Large Language Model (LLM) prompts while maintaining full compatibility with JSON's data model.
+**TOON (Token-Oriented Object Notation)** is a compact, human-readable data format designed to minimize token usage in Large Language Model (LLM) prompts while preserving full compatibility with the JSON data model.
 
-### The Problem with Traditional Formats
+When working with LLMs, every token counts — for both cost and context-window limits. Traditional formats like JSON and XML are verbose and token-expensive. TOON keeps the same information in a fraction of the tokens.
 
-When working with LLMs, every token counts—both for cost and context window limitations. Traditional data formats like JSON and XML are verbose and token-expensive:
+<table>
+<tr>
+<th>JSON (verbose)</th>
+<th>TOON (compact)</th>
+</tr>
+<tr>
+<td>
 
-**JSON Example (verbose):**
 ```json
 {
   "users": [
-    {
-      "id": 1,
-      "name": "Alice",
-      "role": "admin",
-      "active": true
-    },
-    {
-      "id": 2,
-      "name": "Bob",
-      "role": "user",
-      "active": true
-    },
-    {
-      "id": 3,
-      "name": "Charlie",
-      "role": "user",
-      "active": false
-    }
+    { "id": 1, "name": "Alice", "role": "admin", "active": true },
+    { "id": 2, "name": "Bob", "role": "user", "active": true },
+    { "id": 3, "name": "Charlie", "role": "user", "active": false }
   ]
 }
 ```
 
-**TOON Example (compact):**
+</td>
+<td>
+
 ```toon
 users[3]{id,name,role,active}:
   1,Alice,admin,true
@@ -62,439 +70,286 @@ users[3]{id,name,role,active}:
   3,Charlie,user,false
 ```
 
+</td>
+</tr>
+</table>
+
 ### Key Benefits
 
-- **Approximately 40% token reduction:** TOON uses far fewer tokens than JSON, with the biggest savings for tabular data.
-- **Higher LLM retrieval accuracy:** In multi-model benchmarks TOON achieved 73.9% accuracy compared with JSON’s 69.7%.
-- **Lossless, bidirectional conversion:** Converts to and from JSON and XML without losing information.
-- **LLM-friendly schema:** Explicit array lengths ([N]) and field headers `({fields})` provide clear structure that helps models parse reliably.
-- **Tabular optimization:** Uniform arrays of objects are collapsed into CSV-style rows for compactness and efficiency.
-- **Human-readable layout:** YAML-like indentation keeps the format easy to read and debug.
+- **~40% fewer tokens** than JSON, with the largest savings on tabular data.
+- **Higher retrieval accuracy** — in multi-model benchmarks TOON reached 73.9% accuracy versus JSON's 69.7%.
+- **Lossless JSON round-trips** — types are preserved in both directions (see [Type Handling](#type-handling)).
+- **LLM-friendly schema** — explicit array lengths (`[N]`) and field headers (`{fields}`) give models clear structure to parse.
+- **Tabular optimization** — uniform arrays of objects collapse into CSV-style rows.
+- **Human-readable** — YAML-like indentation keeps output easy to read and debug.
 
 ### When to Use TOON
 
-TOON excels when you have:
-- Large datasets with uniform structures (e.g., database records, API responses)
-- Arrays of objects with consistent fields
-- Token-limited LLM contexts where every token matters
-- Need for both human readability and machine efficiency
+Reach for TOON when you have large, uniform datasets (database records, API responses), arrays of objects with consistent fields, or token-limited LLM contexts where every token matters.
 
-### When to Stick with JSON/XML
+Stick with native JSON/XML for deeply nested, non-uniform structures with low tabular eligibility, or when an existing system requires native compatibility.
 
-- Deeply nested, non-uniform structures with low tabular eligibility
-- Existing systems that require native JSON/XML compatibility
-- Applications where parsing performance is more critical than token efficiency
+For the format details, see the [official TOON specification](https://github.com/toon-format/spec).
 
-For more details, see the [official TOON specification](https://github.com/toon-format/spec).
+## Features
+
+| | |
+|---|---|
+| **Three formats** | Convert JSON, XML, and TOML to TOON and back |
+| **Lossless JSON** | Full bidirectional conversion with type preservation |
+| **Minimal dependencies** | JSON/XML use only the standard library; TOML uses `tomllib` (Python 3.11+) or the optional `toml` package |
+| **Tabular optimization** | Automatically detects and collapses uniform arrays of scalar objects |
+| **Flexible indentation** | Any `indent_str` (spaces or tabs) encodes *and* decodes correctly |
+| **File helpers** | Read/write files directly; output directories are created automatically |
+| **XML attributes** | Preserved via `@attribute` notation |
+| **UTF-8 support** | Full Unicode support for international characters |
+| **Path-friendly** | Accepts both `str` and `pathlib.Path` paths |
 
 ## Installation
 
-Install `toonbuilder` from PyPI using pip:
+Install the latest release from [PyPI](https://pypi.org/project/toonbuilder/):
 
 ```bash
 pip install toonbuilder
 ```
 
-Or using pip3:
+To include the optional TOML serialization support:
 
 ```bash
-pip3 install toonbuilder
+pip install "toonbuilder[toml]"
 ```
 
 ### Requirements
 
-- Python 3.7 or higher
-- No external dependencies required (uses only Python standard library)
+- **Python 3.7+**
+- JSON and XML conversion require **no external dependencies** (standard library only).
+- TOML conversion parses with the standard-library `tomllib` on **Python 3.11+**. On older Pythons, or to serialize TOON *back* to TOML, install the optional `toml` package (`pip install "toonbuilder[toml]"`).
 
-### Development Installation
-
-To install from source for development:
+### Install from Source
 
 ```bash
 git clone https://github.com/0xPolybit/toonbuilder.git
 cd toonbuilder
-pip install -e .
+pip install -e ".[test]"
 ```
 
 ## Quick Start
 
-### JSON to TOON Conversion
+### JSON
 
 ```python
 from toonbuilder import json_to_toon
 
-# Convert JSON string to TOON
-json_data = {
+data = {
     "users": [
         {"id": 1, "name": "Alice", "role": "admin"},
-        {"id": 2, "name": "Bob", "role": "user"}
+        {"id": 2, "name": "Bob", "role": "user"},
     ]
 }
 
-toon_output = json_to_toon.encode(json_data)
-print(toon_output)
-# Output:
+toon = json_to_toon.encode(data)
+print(toon)
 # users[2]{id,name,role}:
 #   1,Alice,admin
 #   2,Bob,user
 
-# Convert TOON back to JSON
-original_data = json_to_toon.decode(toon_output)
-print(original_data)
+restored = json_to_toon.decode(toon)   # -> back to the original dict
 ```
 
-### XML to TOON Conversion
+### XML
 
 ```python
 from toonbuilder import xml_to_toon
 
-# Convert XML string to TOON
-xml_string = """
+xml = """
 <users>
-    <user>
-        <id>1</id>
-        <name>Alice</name>
-        <role>admin</role>
-    </user>
-    <user>
-        <id>2</id>
-        <name>Bob</name>
-        <role>user</role>
-    </user>
+    <user><id>1</id><name>Alice</name><role>admin</role></user>
+    <user><id>2</id><name>Bob</name><role>user</role></user>
 </users>
 """
 
-toon_output = xml_to_toon.encode(xml_string)
-print(toon_output)
+toon = xml_to_toon.encode(xml)
+print(toon)
+# users:
+#   user[2]{id,name,role}:
+#     1,Alice,admin
+#     2,Bob,user
 
-# Convert TOON back to XML
-xml_output = xml_to_toon.decode(toon_output)
-print(xml_output)
+xml_out = xml_to_toon.decode(toon)     # -> XML string
 ```
+
+### TOML
+
+```python
+from toonbuilder import toml_to_toon
+
+toml_text = """
+title = "Example"
+
+[[servers]]
+ip = "10.0.0.1"
+role = "frontend"
+
+[[servers]]
+ip = "10.0.0.2"
+role = "backend"
+"""
+
+toon = toml_to_toon.encode(toml_text)
+print(toon)
+# title: Example
+# servers[2]{ip,role}:
+#   10.0.0.1,frontend
+#   10.0.0.2,backend
+
+toml_out = toml_to_toon.decode(toon)   # requires the optional `toml` package
+```
+
+> [!TIP]
+> `toml_to_toon.encode` works out of the box on Python 3.11+ (via `tomllib`). Decoding TOON back to TOML — and encoding on older Pythons — requires the optional `toml` package.
 
 ### File Conversion
 
 ```python
 from toonbuilder import json_to_toon, xml_to_toon
 
-# JSON file conversion
 json_to_toon.encode_file("input.json", "output.toon")
 json_to_toon.decode_file("output.toon", "restored.json")
 
-# XML file conversion
 xml_to_toon.encode_file("input.xml", "output.toon")
 xml_to_toon.decode_file("output.toon", "restored.xml")
 ```
 
 ## Usage
 
-### Converting Python Data Structures
+### Converting Python Objects
 
-#### JSON Module
+Encode any JSON-compatible Python object directly:
 
 ```python
 from toonbuilder import json_to_toon
 
-# Encode Python dict/list to TOON string
 data = {
     "name": "Project Alpha",
     "version": "1.0.0",
     "dependencies": ["numpy", "pandas", "scipy"],
-    "config": {
-        "debug": True,
-        "timeout": 30
-    }
+    "config": {"debug": True, "timeout": 30},
 }
 
-toon_string = json_to_toon.encode(data)
-print(toon_string)
-# Output:
+print(json_to_toon.encode(data))
 # name: Project Alpha
 # version: 1.0.0
 # dependencies[3]: numpy,pandas,scipy
 # config:
 #   debug: true
 #   timeout: 30
-
-# Decode TOON string back to Python dict
-restored_data = json_to_toon.decode(toon_string)
-```
-
-#### XML Module
-
-```python
-from toonbuilder import xml_to_toon
-
-# Encode XML string to TOON
-xml_data = """<?xml version="1.0"?>
-<catalog>
-    <book id="bk101">
-        <author>Gambardella, Matthew</author>
-        <title>XML Developer's Guide</title>
-        <price>44.95</price>
-    </book>
-    <book id="bk102">
-        <author>Ralls, Kim</author>
-        <title>Midnight Rain</title>
-        <price>5.95</price>
-    </book>
-</catalog>"""
-
-toon_string = xml_to_toon.encode(xml_data)
-print(toon_string)
-
-# Decode back to XML
-xml_output = xml_to_toon.decode(toon_string)
 ```
 
 ### Working with Files
 
-#### Automatic File Extension Handling
-
-When you don't specify an output file path, `toonbuilder` automatically uses the input filename with the appropriate extension:
+**Automatic extension handling** — omit the output path and `toonbuilder` derives it from the input filename:
 
 ```python
 from toonbuilder import json_to_toon, xml_to_toon
 
-# These will create data.toon from data.json
-json_to_toon.encode_file("data.json")
-
-# These will create data.xml from data.toon
-xml_to_toon.decode_file("data.toon")
+json_to_toon.encode_file("data.json")   # -> data.toon
+xml_to_toon.decode_file("data.toon")    # -> data.xml
 ```
 
-#### Custom Output Paths
+**Custom output paths** — nested directories are created automatically:
 
 ```python
-# Specify custom output paths
-json_to_toon.encode_file("input.json", "output/converted.toon")
-xml_to_toon.encode_file("config.xml", "toon_files/config.toon")
+json_to_toon.encode_file("input.json", "build/output/converted.toon")
 ```
 
-#### Custom Indentation
+**Custom indentation** — the decoder auto-detects the indentation used on encode:
 
 ```python
-# Use tabs instead of spaces
-json_to_toon.encode_file("data.json", "data.toon", indent_str="\t")
-
-# Use 4 spaces for indentation
-toon_output = json_to_toon.encode(data, indent_str="    ")
+json_to_toon.encode_file("data.json", "data.toon", indent_str="\t")   # tabs
+toon = json_to_toon.encode(data, indent_str="    ")                    # 4 spaces
 ```
 
-### Advanced Usage
+### Error Handling
 
-#### Handling Complex Nested Structures
+```python
+from toonbuilder import json_to_toon
+import json
+
+try:
+    json_to_toon.encode_file("nonexistent.json")
+except FileNotFoundError as err:
+    print(f"Missing file: {err}")
+
+try:
+    json_to_toon.encode_file("invalid.json")
+except json.JSONDecodeError as err:
+    print(f"Invalid JSON: {err}")
+```
+
+## Type Handling
+
+To guarantee a **lossless JSON round-trip**, string values that would otherwise be read back as a different type are automatically quoted:
 
 ```python
 from toonbuilder import json_to_toon
 
-complex_data = {
-    "company": "Tech Corp",
-    "employees": [
-        {
-            "id": 1,
-            "name": "Alice Johnson",
-            "department": "Engineering",
-            "skills": ["Python", "JavaScript", "Go"],
-            "salary": 120000,
-            "active": True
-        },
-        {
-            "id": 2,
-            "name": "Bob Smith",
-            "department": "Engineering",
-            "skills": ["Java", "Kotlin", "SQL"],
-            "salary": 115000,
-            "active": True
-        },
-        {
-            "id": 3,
-            "name": "Carol White",
-            "department": "Design",
-            "skills": ["Figma", "Photoshop", "Illustrator"],
-            "salary": 95000,
-            "active": False
-        }
-    ],
-    "metadata": {
-        "updated": "2025-12-04",
-        "version": 2
-    }
-}
+data = {"zip": "01234", "version": "1.0", "flag": "true"}
+toon = json_to_toon.encode(data)
+# zip: "01234"
+# version: "1.0"
+# flag: "true"
 
-# TOON format efficiently handles tabular employee data
-toon_output = json_to_toon.encode(complex_data)
-print(toon_output)
+json_to_toon.decode(toon) == data   # True — types are preserved
 ```
 
-#### Error Handling
-
-```python
-from toonbuilder import json_to_toon, xml_to_toon
-import json
-
-# Handle missing files
-try:
-    json_to_toon.encode_file("nonexistent.json")
-except FileNotFoundError as e:
-    print(f"Error: {e}")
-
-# Handle invalid JSON
-try:
-    with open("invalid.json", "w") as f:
-        f.write("{invalid json content}")
-    json_to_toon.encode_file("invalid.json")
-except json.JSONDecodeError as e:
-    print(f"Invalid JSON: {e}")
-
-# Handle invalid TOON format
-try:
-    json_to_toon.decode("malformed [ toon content")
-except ValueError as e:
-    print(f"Invalid TOON format: {e}")
-```
+Because **XML** is inherently untyped (all element text is a string), leaf text is *coerced* to a number or boolean when unambiguous. This keeps tabular output compact (`1,Alice` rather than `"1",Alice`) but is intentionally lossy for values such as `007` (which becomes `7`). Use the JSON module when exact string preservation matters.
 
 ## API Reference
 
-### `json_to_toon` Module
+All three modules share the same four-function surface: `encode`, `decode`, `encode_file`, and `decode_file`.
 
-#### `encode(data, indent_level=0, indent_str="  ")`
+### `json_to_toon`
 
-Convert Python data structures to TOON format.
+| Function | Description |
+|---|---|
+| `encode(data, indent_level=0, indent_str="  ")` | Encode a Python object (dict, list, or scalar) to a TOON string. |
+| `decode(toon_text)` | Decode a TOON string back to a Python object. |
+| `encode_file(json_file_path, toon_file_path=None, indent_str="  ")` | Read a JSON file, write TOON. Defaults to the same name with a `.toon` extension. Raises `FileNotFoundError` / `json.JSONDecodeError`. |
+| `decode_file(toon_file_path, json_file_path=None, indent=2)` | Read a TOON file, write JSON. Raises `FileNotFoundError` / `ValueError`. |
 
-**Parameters:**
-- `data` (Any): Python object to encode (dict, list, str, int, float, bool, None)
-- `indent_level` (int): Starting indentation level (default: 0)
-- `indent_str` (str): String used for one level of indentation (default: two spaces)
+### `xml_to_toon`
 
-**Returns:** `str` - TOON formatted string
+| Function | Description |
+|---|---|
+| `encode(data, indent_level=0, indent_str="  ")` | Encode XML (`str`, `Element`, or `ElementTree`) to TOON. |
+| `decode(toon_text, root_name="root")` | Decode TOON back to an XML string. |
+| `encode_file(xml_file_path, toon_file_path=None, indent_str="  ")` | Read an XML file, write TOON. Raises `FileNotFoundError` / `xml.etree.ElementTree.ParseError`. |
+| `decode_file(toon_file_path, xml_file_path=None, root_name="root")` | Read a TOON file, write XML. Raises `FileNotFoundError` / `ValueError`. |
 
-**Example:**
-```python
-data = {"name": "Alice", "age": 30}
-toon_str = json_to_toon.encode(data)
-```
+### `toml_to_toon`
 
-#### `decode(toon_text)`
+Parsing uses the standard-library `tomllib` on Python 3.11+; serialization back to TOML (and parsing on older Pythons) requires the optional `toml` package.
 
-Convert TOON format to Python data structures.
+| Function | Description |
+|---|---|
+| `encode(data, indent_level=0, indent_str="  ")` | Encode a TOML string (or parsed mapping) to TOON. Raises `ImportError` if no parser is available. |
+| `decode(toon_text)` | Decode TOON back to a TOML string. Raises `ImportError` if `toml` is not installed. |
+| `encode_file(toml_file_path, toon_file_path=None, indent_str="  ")` | Read a TOML file, write TOON. |
+| `decode_file(toon_file_path, toml_file_path=None)` | Read a TOON file, write TOML. |
 
-**Parameters:**
-- `toon_text` (str): TOON formatted string
+**Common parameters**
 
-**Returns:** `Any` - Python object (dict, list, primitives)
-
-**Example:**
-```python
-data = json_to_toon.decode("name: Alice\nage: 30")
-```
-
-#### `encode_file(json_file_path, toon_file_path=None, indent_str="  ")`
-
-Read JSON file and write TOON output.
-
-**Parameters:**
-- `json_file_path` (str | Path): Input JSON file path
-- `toon_file_path` (str | Path | None): Output TOON file path (default: same name with .toon extension)
-- `indent_str` (str): Indentation string (default: two spaces)
-
-**Raises:**
-- `FileNotFoundError`: If input file doesn't exist
-- `json.JSONDecodeError`: If input contains invalid JSON
-
-#### `decode_file(toon_file_path, json_file_path=None, indent=2)`
-
-Read TOON file and write JSON output.
-
-**Parameters:**
-- `toon_file_path` (str | Path): Input TOON file path
-- `json_file_path` (str | Path | None): Output JSON file path (default: same name with .json extension)
-- `indent` (int): Number of spaces for JSON indentation (default: 2)
-
-**Raises:**
-- `FileNotFoundError`: If input file doesn't exist
-- `ValueError`: If input contains invalid TOON format
-
-### `xml_to_toon` Module
-
-#### `encode(data, indent_level=0, indent_str="  ")`
-
-Convert XML data to TOON format.
-
-**Parameters:**
-- `data` (str | Element | ElementTree): XML data to encode
-- `indent_level` (int): Starting indentation level (default: 0)
-- `indent_str` (str): String used for one level of indentation (default: two spaces)
-
-**Returns:** `str` - TOON formatted string
-
-**Example:**
-```python
-xml_str = "<person><name>Alice</name><age>30</age></person>"
-toon_str = xml_to_toon.encode(xml_str)
-```
-
-#### `decode(toon_text, root_name="root")`
-
-Convert TOON format to XML string.
-
-**Parameters:**
-- `toon_text` (str): TOON formatted string
-- `root_name` (str): Name for root element if needed (default: "root")
-
-**Returns:** `str` - XML formatted string
-
-**Example:**
-```python
-xml_str = xml_to_toon.decode("person:\n  name: Alice\n  age: 30")
-```
-
-#### `encode_file(xml_file_path, toon_file_path=None, indent_str="  ")`
-
-Read XML file and write TOON output.
-
-**Parameters:**
-- `xml_file_path` (str | Path): Input XML file path
-- `toon_file_path` (str | Path | None): Output TOON file path (default: same name with .toon extension)
-- `indent_str` (str): Indentation string (default: two spaces)
-
-**Raises:**
-- `FileNotFoundError`: If input file doesn't exist
-- `xml.etree.ElementTree.ParseError`: If input contains invalid XML
-
-#### `decode_file(toon_file_path, xml_file_path=None, root_name="root")`
-
-Read TOON file and write XML output.
-
-**Parameters:**
-- `toon_file_path` (str | Path): Input TOON file path
-- `xml_file_path` (str | Path | None): Output XML file path (default: same name with .xml extension)
-- `root_name` (str): Name for root element if needed (default: "root")
-
-**Raises:**
-- `FileNotFoundError`: If input file doesn't exist
-- `ValueError`: If input contains invalid TOON format
-
-## Features
-
-- **Lossless Conversion**: Full bidirectional conversion between JSON/XML and TOON
-- **Zero Dependencies**: Uses only Python standard library
-- **Type Preservation**: Maintains data types (strings, numbers, booleans, null)
-- **Tabular Optimization**: Automatically detects and optimizes uniform arrays
-- **Path Objects**: Supports both string paths and `pathlib.Path` objects
-- **UTF-8 Support**: Full Unicode support for international characters
-- **Pretty Formatting**: Human-readable indentation and structure
-- **XML Attributes**: Preserves XML attributes using `@attribute` notation
-- **Error Messages**: Clear, descriptive error messages for debugging
+- `indent_str` (str) — string used for one indentation level (default: two spaces). Tabs and other widths are fully supported and auto-detected on decode.
+- `indent_level` (int) — starting indentation level, used internally for recursion (default: `0`).
+- `root_name` (str) — name for the XML root element when the TOON data is not already wrapped (default: `"root"`).
 
 ## Examples
 
-### Real-World Use Case: API Response
+### API Response
 
 ```python
 from toonbuilder import json_to_toon
 
-# Typical API response
 api_response = {
     "status": "success",
     "total": 150,
@@ -502,23 +357,16 @@ api_response = {
     "results": [
         {"id": 1, "product": "Laptop", "price": 999.99, "stock": 15},
         {"id": 2, "product": "Mouse", "price": 24.99, "stock": 150},
-        {"id": 3, "product": "Keyboard", "price": 79.99, "stock": 45}
-    ]
+    ],
 }
 
-# Convert to TOON for LLM prompt
-toon_format = json_to_toon.encode(api_response)
-print(toon_format)
-# Output:
+print(json_to_toon.encode(api_response))
 # status: success
 # total: 150
 # page: 1
-# results[3]{id,product,price,stock}:
+# results[2]{id,product,price,stock}:
 #   1,Laptop,999.99,15
 #   2,Mouse,24.99,150
-#   3,Keyboard,79.99,45
-
-# Now you can use this in your LLM prompt with ~40% fewer tokens!
 ```
 
 ### Database Records
@@ -526,88 +374,82 @@ print(toon_format)
 ```python
 from toonbuilder import json_to_toon
 
-# Database query results
-db_records = {
-    "query": "SELECT * FROM users WHERE active = true",
-    "count": 3,
-    "records": [
-        {"user_id": 101, "username": "alice_dev", "email": "alice@example.com", "created": "2024-01-15", "active": True},
-        {"user_id": 102, "username": "bob_admin", "email": "bob@example.com", "created": "2024-02-20", "active": True},
-        {"user_id": 103, "username": "carol_user", "email": "carol@example.com", "created": "2024-03-10", "active": True}
-    ]
+records = {
+    "company": "Tech Corp",
+    "employees": [
+        {"id": 1, "name": "Alice", "department": "Engineering", "active": True},
+        {"id": 2, "name": "Bob", "department": "Design", "active": False},
+    ],
+    "metadata": {"updated": "2025-12-04", "version": 2},
 }
 
-# Efficiently encode for LLM analysis
-toon_output = json_to_toon.encode(db_records)
+print(json_to_toon.encode(records))
+# company: Tech Corp
+# employees[2]{id,name,department,active}:
+#   1,Alice,Engineering,true
+#   2,Bob,Design,false
+# metadata:
+#   updated: 2025-12-04
+#   version: 2
 ```
 
 ## Contributing
 
-Contributions are welcome! Here's how you can help:
+Contributions are welcome! To get started:
 
-1. **Fork the repository**
-2. **Create a feature branch**: `git checkout -b feature/amazing-feature`
-3. **Make your changes**: Add features, fix bugs, or improve documentation
-4. **Run tests**: Ensure all tests pass (coming soon)
-5. **Commit your changes**: `git commit -m 'Add amazing feature'`
-6. **Push to the branch**: `git push origin feature/amazing-feature`
-7. **Open a Pull Request**
+1. **Fork** the repository and **create a branch**: `git checkout -b feature/amazing-feature`
+2. **Install** the project with test dependencies: `pip install -e ".[test]"`
+3. **Make your changes**, keeping to PEP 8 and adding docstrings and type hints.
+4. **Run the tests**: `pytest`
+5. **Commit and push**, then **open a Pull Request** describing your change.
 
-### Development Setup
+### Development
 
 ```bash
-# Clone the repository
 git clone https://github.com/0xPolybit/toonbuilder.git
 cd toonbuilder
+pip install -e ".[test]"
 
-# Install in development mode
-pip install -e .
+# Run the test suite
+pytest
 
-# Make your changes and test them
+# Quick sanity check
 python -c "from toonbuilder import json_to_toon; print(json_to_toon.encode({'test': 'data'}))"
 ```
 
-### Guidelines
+## FAQ
 
-- Follow PEP 8 style guidelines
-- Add docstrings to all functions and classes
-- Include type hints where appropriate
-- Update README.md if you add new features
-- Be respectful and constructive in discussions
+**Is TOON compatible with all JSON data?**
+Yes. TOON supports the complete JSON data model, and the JSON module round-trips losslessly.
 
-## License
+**Does it have external dependencies?**
+JSON and XML conversion use only the Python standard library. TOML parsing needs `tomllib` (bundled with Python 3.11+) or the optional `toml` package.
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+**Does TOON work with all LLMs?**
+TOON is model-agnostic. Benchmarks show improved accuracy across Claude, GPT, Gemini, and Grok models.
+
+**How much token reduction can I expect?**
+It depends on your data. Uniform arrays of objects see the largest savings (~40%); deeply nested, non-uniform data sees less. Try your own data in the [TOON Playground](https://toonformat.dev/playground).
+
+**Are XML attributes preserved?**
+Yes — attributes are encoded with the `@attribute` prefix, though attribute ordering may change during processing.
 
 ## Acknowledgments
 
-- **TOON Format Specification**: Thanks to the [toon-format](https://github.com/toon-format/toon) team for creating and maintaining the TOON specification
-- **Community**: Thanks to all contributors and users who help improve this library
+- **TOON format** — created and maintained by [Johann Schopplich](https://github.com/toon-format/toon) and the [toon-format](https://github.com/toon-format) team.
+- **Community** — thanks to everyone who reports issues and contributes improvements.
 
-## Links
+### Links
 
-- **TOON Specification**: [https://github.com/toon-format/spec](https://github.com/toon-format/spec)
-- **TOON Playground**: [https://toonformat.dev/playground](https://toonformat.dev/playground)
-- **Report Issues**: [https://github.com/0xPolybit/toonbuilder/issues](https://github.com/0xPolybit/toonbuilder/issues)
-- **PyPI Package**: [https://pypi.org/project/toonbuilder/](https://pypi.org/project/toonbuilder/)
+- [TOON Specification](https://github.com/toon-format/spec)
+- [TOON Playground](https://toonformat.dev/playground)
+- [PyPI Package](https://pypi.org/project/toonbuilder/)
+- [Report an Issue](https://github.com/0xPolybit/toonbuilder/issues)
 
-## FAQ
+## License
 
-**Q: Is TOON compatible with all JSON data?**  
-A: Yes! TOON supports the complete JSON data model with lossless conversion.
-
-**Q: Can I use this in production?**  
-A: Yes, the library uses only Python's standard library with no external dependencies.
-
-**Q: Does TOON work with all LLMs?**  
-A: TOON is designed to be universally compatible with any LLM. Benchmarks show improved accuracy across Claude, GPT, Gemini, and Grok models.
-
-**Q: How much token reduction can I expect?**  
-A: It depends on your data structure. Uniform arrays see ~40% reduction, while deeply nested objects may see less benefit. Use the [TOON Playground](https://toonformat.dev/playground) to test your specific data.
-
-**Q: Is XML attribute order preserved?**  
-A: XML attributes are preserved during conversion, though Python dictionaries may reorder them during processing.
+Released under the [MIT License](LICENSE).
 
 ---
 
-<p align="center">Made with ❤️ for the LLM community</p>
+<p align="center">Made with care for the LLM community.</p>
