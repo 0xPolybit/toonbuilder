@@ -37,8 +37,6 @@ def encode(data: Any, indent_level: int = 0, indent_str: str = "  ") -> str:
         >>> encode({"tags": ["python", "json", "toon"]})
         'tags[3]: python,json,toon'
     """
-    indent = indent_str * indent_level
-    
     if data is None:
         return "null"
     elif isinstance(data, bool):
@@ -58,12 +56,33 @@ def encode(data: Any, indent_level: int = 0, indent_str: str = "  ") -> str:
         return str(data)
 
 
+def _parses_as_number(s: str) -> bool:
+    """Return True if ``s`` would be parsed back as an int or float by ``_parse_value``.
+
+    Mirrors the numeric logic in ``_parse_value`` exactly so that encoding and
+    decoding stay symmetric (e.g. ``"01234"`` and ``"1.0"`` are numbers, while
+    ``"1e5"``, ``"inf"`` and ``"0x1F"`` are not).
+    """
+    try:
+        float(s) if '.' in s else int(s)
+        return True
+    except ValueError:
+        return False
+
+
 def _needs_quoting(s: str) -> bool:
     """Check if a string needs to be quoted in TOON format."""
     if not s:
         return True
     special_chars = [',', ':', '\n', '\r', '\t']
-    return any(char in s for char in special_chars) or s.strip() != s
+    if any(char in s for char in special_chars) or s.strip() != s:
+        return True
+    # Quote strings that would otherwise decode back as a non-string scalar or
+    # structural token so that types survive a round-trip (e.g. "01234", "1.0",
+    # "true", "null", "{}", "[]").
+    if s in ("true", "false", "null", "{}", "[]"):
+        return True
+    return _parses_as_number(s)
 
 
 def _encode_object(obj: Dict[str, Any], indent_level: int, indent_str: str) -> str:
@@ -101,23 +120,30 @@ def _encode_object(obj: Dict[str, Any], indent_level: int, indent_str: str) -> s
 
 
 def _is_tabular_array(arr: List[Any]) -> bool:
-    """Check if an array is tabular (list of uniform dictionaries)."""
+    """Check if an array is tabular (list of uniform dictionaries).
+
+    A tabular array requires every element to be a dict with the same keys *and*
+    every value to be a scalar. Rows containing nested dicts/lists cannot be
+    represented as a single CSV line, so those fall back to non-tabular encoding.
+    """
     if not arr or not isinstance(arr[0], dict):
         return False
-    
-    # Check if all elements are dicts with the same keys
+
     first_keys = set(arr[0].keys())
-    return all(isinstance(item, dict) and set(item.keys()) == first_keys for item in arr)
+    scalar_types = (str, int, float, bool, type(None))
+    for item in arr:
+        if not isinstance(item, dict) or set(item.keys()) != first_keys:
+            return False
+        if not all(isinstance(value, scalar_types) for value in item.values()):
+            return False
+    return True
 
 
 def _encode_tabular_array(key: str, arr: List[Dict], indent_level: int, indent_str: str) -> str:
     """Encode a uniform array of objects in tabular format."""
     indent = indent_str * indent_level
     row_indent = indent_str * (indent_level + 1)
-    
-    if not arr:
-        return f"{indent}{key}[0]:"
-    
+
     # Get field names from first object
     fields = list(arr[0].keys())
     field_str = ','.join(fields)
@@ -137,61 +163,68 @@ def _encode_tabular_array(key: str, arr: List[Dict], indent_level: int, indent_s
     return '\n'.join(lines)
 
 
+def _encode_list_items(arr: List[Any], indent_level: int, indent_str: str) -> List[str]:
+    """Encode array elements as YAML-style list items for non-tabular arrays.
+
+    Each element is written under a ``-`` marker at ``indent_level + 1``:
+    scalars (and empty containers) are placed inline (``- value``) while
+    non-empty dicts/lists go on the following, more-indented lines so the
+    normal object/array parser can read them back. Returns the body lines only
+    (the ``key[N]:`` / ``[N]:`` header is added by the caller).
+    """
+    item_indent = indent_str * (indent_level + 1)
+    lines: List[str] = []
+    for item in arr:
+        if isinstance(item, (dict, list)) and item:
+            lines.append(f"{item_indent}-")
+            lines.append(encode(item, indent_level + 2, indent_str))
+        else:
+            lines.append(f"{item_indent}- {encode(item, 0, indent_str)}")
+    return lines
+
+
 def _encode_non_tabular_array(key: str, arr: List[Any], indent_level: int, indent_str: str) -> str:
-    """Encode a non-tabular array (simple values or mixed types)."""
+    """Encode a non-tabular array (primitives, mixed types, or nested structures)."""
     indent = indent_str * indent_level
-    
+
     if not arr:
         return f"{indent}{key}[0]:"
-    
-    # Check if all elements are simple primitives
+
+    # All-primitive arrays are written inline as a compact CSV row.
     if all(isinstance(item, (str, int, float, bool, type(None))) for item in arr):
-        # Simple array on one line
         values = [encode(item, 0, indent_str) for item in arr]
         return f"{indent}{key}[{len(arr)}]: {','.join(values)}"
-    else:
-        # Complex array with nested structures
-        lines = [f"{indent}{key}[{len(arr)}]:"]
-        for item in arr:
-            if isinstance(item, (dict, list)):
-                encoded = encode(item, indent_level + 1, indent_str)
-                lines.append(encoded)
-            else:
-                row_indent = indent_str * (indent_level + 1)
-                lines.append(f"{row_indent}{encode(item, 0, indent_str)}")
-        return '\n'.join(lines)
+
+    # Otherwise use the expanded list-item form so the array round-trips.
+    lines = [f"{indent}{key}[{len(arr)}]:"]
+    lines.extend(_encode_list_items(arr, indent_level, indent_str))
+    return '\n'.join(lines)
 
 
 def _encode_array(arr: List[Any], indent_level: int, indent_str: str) -> str:
-    """Encode a top-level array."""
+    """Encode an array (top-level or nested)."""
     if not arr:
         return "[]"
-    
-    # For top-level arrays, we need to handle them specially
+
+    indent = indent_str * indent_level
+
     if _is_tabular_array(arr):
-        indent = indent_str * indent_level
         row_indent = indent_str * (indent_level + 1)
-        
         fields = list(arr[0].keys())
         field_str = ','.join(fields)
-        
-        lines = [f"[{len(arr)}]{{{field_str}}}:"]
+        lines = [f"{indent}[{len(arr)}]{{{field_str}}}:"]
         for item in arr:
             values = [encode(item.get(field), 0, indent_str) for field in fields]
             lines.append(f"{row_indent}{','.join(values)}")
         return '\n'.join(lines)
-    else:
-        # Simple array or mixed array
-        if all(isinstance(item, (str, int, float, bool, type(None))) for item in arr):
-            values = [encode(item, 0, indent_str) for item in arr]
-            return f"[{len(arr)}]: {','.join(values)}"
-        else:
-            # Complex array
-            lines = [f"[{len(arr)}]:"]
-            for item in arr:
-                encoded = encode(item, indent_level + 1, indent_str)
-                lines.append(encoded)
-            return '\n'.join(lines)
+
+    if all(isinstance(item, (str, int, float, bool, type(None))) for item in arr):
+        values = [encode(item, 0, indent_str) for item in arr]
+        return f"{indent}[{len(arr)}]: {','.join(values)}"
+
+    lines = [f"{indent}[{len(arr)}]:"]
+    lines.extend(_encode_list_items(arr, indent_level, indent_str))
+    return '\n'.join(lines)
 
 
 def decode(toon_text: str) -> Any:
@@ -222,25 +255,47 @@ def decode(toon_text: str) -> Any:
     """
     if not toon_text or not toon_text.strip():
         return None
-    
+
     lines = toon_text.split('\n')
-    result, _ = _parse_lines(lines, 0, 0)
+    unit_len = _detect_indent_width(lines)
+    result, _ = _parse_lines(lines, 0, 0, unit_len)
     return result
 
 
-def _parse_lines(lines: List[str], start_idx: int, base_indent: int) -> tuple:
+def _detect_indent_width(lines: List[str]) -> int:
+    """Infer the width (in characters) of one indentation level.
+
+    ``encode`` accepts an arbitrary ``indent_str`` (two spaces, four spaces, a
+    tab, ...). The decoder measures indentation as a raw character count, so it
+    needs to know how many characters make up a single level. This returns the
+    smallest non-zero leading-whitespace width found, which corresponds to one
+    level for any consistent indentation style. Defaults to 2.
+    """
+    widths = []
+    for line in lines:
+        if not line.strip():
+            continue
+        stripped = line.lstrip(' \t')
+        width = len(line) - len(stripped)
+        if width:
+            widths.append(width)
+    return min(widths) if widths else 2
+
+
+def _parse_lines(lines: List[str], start_idx: int, base_indent: int, unit_len: int = 2) -> tuple:
     """
     Parse TOON lines starting from start_idx with base indentation level.
-    
+
     Returns (parsed_value, next_line_index)
     """
     if start_idx >= len(lines):
         return None, start_idx
-    
-    # Check if this is a top-level array
+
+    # Check if this line is an array declaration (top-level or a nested element)
     first_line = lines[start_idx].strip()
     if first_line.startswith('[') and ':' in first_line:
-        return _parse_top_level_array(lines, start_idx)
+        base = _get_indent_level(lines[start_idx], unit_len)
+        return _parse_top_level_array(lines, start_idx, base, unit_len)
     
     # Otherwise, parse as object
     result = {}
@@ -252,42 +307,42 @@ def _parse_lines(lines: List[str], start_idx: int, base_indent: int) -> tuple:
             idx += 1
             continue
         
-        indent = _get_indent_level(line)
-        
+        indent = _get_indent_level(line, unit_len)
+
         # If indent is less than base, we're done with this level
         if indent < base_indent:
             break
-        
+
         # Only process lines at our exact indent level
         if indent > base_indent:
             idx += 1
             continue
-        
+
         line_content = line.strip()
-        
+
         # Parse key-value or array declaration
         if ':' in line_content:
             key, rest = line_content.split(':', 1)
             key = key.strip()
             rest = rest.strip()
-            
+
             # Check if key has array declaration
             if '[' in key and ']' in key:
                 # Array
                 array_name, array_info = key.split('[', 1)
                 array_name = array_name.strip()
-                
+
                 if '{' in array_info:
                     # Tabular array
-                    value, idx = _parse_tabular_array(lines, idx, indent)
+                    value, idx = _parse_tabular_array(lines, idx, indent, unit_len)
                     result[array_name] = value
                 else:
                     # Simple array
-                    value, idx = _parse_simple_array(lines, idx, rest, indent)
+                    value, idx = _parse_simple_array(lines, idx, rest, indent, unit_len)
                     result[array_name] = value
             elif not rest:
                 # Nested object or array
-                value, idx = _parse_lines(lines, idx + 1, indent + 1)
+                value, idx = _parse_lines(lines, idx + 1, indent + 1, unit_len)
                 result[key] = value
             else:
                 # Simple value
@@ -299,21 +354,21 @@ def _parse_lines(lines: List[str], start_idx: int, base_indent: int) -> tuple:
     return result, idx
 
 
-def _parse_top_level_array(lines: List[str], start_idx: int) -> tuple:
-    """Parse a top-level array (starts with [N])."""
+def _parse_top_level_array(lines: List[str], start_idx: int, base_indent: int = 0, unit_len: int = 2) -> tuple:
+    """Parse an array declaration line (``[N]...``), top-level or nested."""
     first_line = lines[start_idx].strip()
-    
+
     # Extract length and check for fields
     if '{' in first_line:
         # Tabular array
-        return _parse_tabular_array(lines, start_idx, 0)
+        return _parse_tabular_array(lines, start_idx, base_indent, unit_len)
     else:
-        # Simple array
+        # Simple / non-tabular array
         rest = first_line.split(':', 1)[1].strip() if ':' in first_line else ""
-        return _parse_simple_array(lines, start_idx, rest, 0)
+        return _parse_simple_array(lines, start_idx, rest, base_indent, unit_len)
 
 
-def _parse_tabular_array(lines: List[str], start_idx: int, base_indent: int) -> tuple:
+def _parse_tabular_array(lines: List[str], start_idx: int, base_indent: int, unit_len: int = 2) -> tuple:
     """Parse a tabular array with field headers."""
     header_line = lines[start_idx].strip()
     
@@ -339,10 +394,10 @@ def _parse_tabular_array(lines: List[str], start_idx: int, base_indent: int) -> 
             idx += 1
             continue
         
-        indent = _get_indent_level(line)
+        indent = _get_indent_level(line, unit_len)
         if indent < row_indent:
             break
-        
+
         if indent == row_indent:
             values = _parse_csv_line(line.strip())
             if len(values) == len(fields):
@@ -354,34 +409,46 @@ def _parse_tabular_array(lines: List[str], start_idx: int, base_indent: int) -> 
     return result, idx
 
 
-def _parse_simple_array(lines: List[str], start_idx: int, rest: str, base_indent: int) -> tuple:
-    """Parse a simple array (primitives or inline values)."""
+def _parse_simple_array(lines: List[str], start_idx: int, rest: str, base_indent: int, unit_len: int = 2) -> tuple:
+    """Parse a non-tabular array (inline primitives or the ``-`` list-item form)."""
     if rest:
-        # Inline array
+        # Inline primitive array: key[N]: v1,v2,...
         values = _parse_csv_line(rest)
         return [_parse_value(v) for v in values], start_idx + 1
-    else:
-        # Multi-line array
-        result = []
-        idx = start_idx + 1
-        item_indent = base_indent + 1
-        
-        while idx < len(lines):
-            line = lines[idx]
-            if not line.strip():
-                idx += 1
-                continue
-            
-            indent = _get_indent_level(line)
-            if indent < item_indent:
-                break
-            
-            if indent == item_indent:
-                result.append(_parse_value(line.strip()))
-            
+
+    # Expanded list-item form: one element per '-' marker.
+    result = []
+    idx = start_idx + 1
+    item_indent = base_indent + 1
+
+    while idx < len(lines):
+        line = lines[idx]
+        if not line.strip():
             idx += 1
-        
-        return result, idx
+            continue
+
+        indent = _get_indent_level(line, unit_len)
+        if indent < item_indent:
+            break
+        if indent > item_indent:
+            idx += 1
+            continue
+
+        content = line.strip()
+        if content == '-':
+            # Nested object/array element on the following, deeper lines.
+            value, idx = _parse_lines(lines, idx + 1, item_indent + 1, unit_len)
+            result.append(value)
+        elif content.startswith('- '):
+            # Inline scalar (or empty container) element.
+            result.append(_parse_value(content[2:].strip()))
+            idx += 1
+        else:
+            # Fallback: a bare scalar line without a marker.
+            result.append(_parse_value(content))
+            idx += 1
+
+    return result, idx
 
 
 def _parse_csv_line(line: str) -> List[str]:
@@ -437,25 +504,32 @@ def _parse_value(value_str: str) -> Any:
         return True
     elif value_str == "false":
         return False
-    
-    # Try to parse as number
-    try:
-        if '.' in value_str:
-            return float(value_str)
-        else:
-            return int(value_str)
-    except ValueError:
-        # Return as string
-        return value_str
+    elif value_str == "{}":
+        return {}
+    elif value_str == "[]":
+        return []
+
+    # Try to parse as number (kept symmetric with _parses_as_number / _needs_quoting)
+    if _parses_as_number(value_str):
+        return float(value_str) if '.' in value_str else int(value_str)
+
+    # Otherwise it is a plain (unquoted) string
+    return value_str
 
 
-def _get_indent_level(line: str) -> int:
-    """Calculate the indentation level of a line (assuming 2 spaces per level)."""
+def _get_indent_level(line: str, unit_len: int = 2) -> int:
+    """Calculate the indentation level of a line.
+
+    Indentation is measured as raw leading-whitespace characters (spaces or
+    tabs) divided by ``unit_len``, the width of a single level as inferred by
+    ``_detect_indent_width``. This lets the decoder handle any ``indent_str``
+    the encoder was given (two spaces, four spaces, tabs, ...).
+    """
     if not line:
         return 0
-    
-    spaces = len(line) - len(line.lstrip(' '))
-    return spaces // 2
+
+    width = len(line) - len(line.lstrip(' \t'))
+    return width // unit_len
 
 
 def encode_file(json_file_path: Union[str, Path], toon_file_path: Optional[Union[str, Path]] = None, 
@@ -505,8 +579,9 @@ def encode_file(json_file_path: Union[str, Path], toon_file_path: Optional[Union
     
     # Encode to TOON format
     toon_content = encode(data, indent_str=indent_str)
-    
-    # Write to TOON file
+
+    # Write to TOON file (creating the output directory if needed)
+    toon_path.parent.mkdir(parents=True, exist_ok=True)
     with open(toon_path, 'w', encoding='utf-8') as f:
         f.write(toon_content)
 
@@ -556,6 +631,7 @@ def decode_file(toon_file_path: Union[str, Path], json_file_path: Optional[Union
     except Exception as e:
         raise ValueError(f"Invalid TOON format in file {toon_file_path}: {str(e)}")
     
-    # Write to JSON file
+    # Write to JSON file (creating the output directory if needed)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=indent, ensure_ascii=False)

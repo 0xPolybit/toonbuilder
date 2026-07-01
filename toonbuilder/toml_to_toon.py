@@ -120,6 +120,7 @@ def encode_file(toml_file_path: Union[str, Path], toon_file_path: Optional[Union
 
     toon_content = json_to_toon.encode(parsed, indent_str=indent_str)
 
+    toon_path.parent.mkdir(parents=True, exist_ok=True)
     toon_path.write_text(toon_content, encoding='utf-8')
 
 
@@ -144,4 +145,5 @@ def decode_file(toon_file_path: Union[str, Path], toml_file_path: Optional[Union
 
     toml_text = _dump_toml(obj)
 
+    toml_path.parent.mkdir(parents=True, exist_ok=True)
     toml_path.write_text(toml_text, encoding='utf-8')

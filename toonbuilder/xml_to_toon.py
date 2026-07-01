@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any, List, Dict, Union, Optional
 from xml.dom import minidom
 
+from . import json_to_toon
+
 
 def encode(data: Any, indent_level: int = 0, indent_str: str = "  ") -> str:
     """
@@ -32,7 +34,7 @@ def encode(data: Any, indent_level: int = 0, indent_str: str = "  ") -> str:
         >>> xml_str = '<person><name>Alice</name><age>30</age></person>'
         >>> encode(xml_str)
         'person:\\n  name: Alice\\n  age: 30'
-        
+
         >>> xml_str = '<users><user><id>1</id><name>Alice</name></user><user><id>2</id><name>Bob</name></user></users>'
         >>> encode(xml_str)
         'users:\\n  user[2]{id,name}:\\n    1,Alice\\n    2,Bob'
@@ -44,74 +46,70 @@ def encode(data: Any, indent_level: int = 0, indent_str: str = "  ") -> str:
         root = data.getroot()
     else:
         root = data
-    
+
     if root is None:
         return ""
-    
-    # Convert XML element to dictionary structure
-    dict_data = _xml_to_dict(root)
-    
-    # Use json_to_toon encoding logic
-    from . import json_to_toon
+
+    # Convert XML element to a dictionary structure, wrapping once under the
+    # root tag, then reuse the json_to_toon encoder.
+    dict_data = {root.tag: _element_to_value(root)}
     return json_to_toon.encode(dict_data, indent_level, indent_str)
 
 
-def _xml_to_dict(element: ET.Element) -> Any:
+def _coerce_scalar(text: str) -> Any:
+    """Coerce XML leaf text into a scalar type where unambiguous.
+
+    XML is untyped (all text), but to keep TOON output compact (and tabular
+    arrays clean, e.g. ``1,Alice`` rather than ``"1",Alice``) numeric and
+    boolean-looking text is coerced. Note this is intentionally lossy for
+    values like ``007`` -> ``7``; everything else is left as a string.
     """
-    Convert an XML element to a dictionary structure.
-    
-    Handles:
-    - Elements with text content -> string values
-    - Elements with attributes -> included in dict
-    - Elements with children -> nested dicts or lists
-    - Repeated child elements -> lists
+    if text in ("true", "false"):
+        return text == "true"
+    if json_to_toon._parses_as_number(text):
+        return float(text) if '.' in text else int(text)
+    return text
+
+
+def _element_to_value(element: ET.Element) -> Any:
     """
+    Convert an XML element to its TOON-friendly *content* (unwrapped).
+
+    The caller is responsible for wrapping the root element under its tag, so
+    this returns only the element's value. Handles:
+    - Leaf elements (no attributes/children) -> a coerced scalar (or None)
+    - Attributes -> ``@name`` keys
+    - Child elements -> nested values, repeated tags become lists
+    - Mixed content (text alongside children) -> ``#text`` key
+    """
+    children = list(element)
+    text = (element.text or "").strip()
+
+    # Pure leaf: no attributes and no child elements -> a scalar value.
+    if not element.attrib and not children:
+        return _coerce_scalar(text) if text else None
+
     result: Dict[str, Any] = {}
-    
-    # Add attributes with @ prefix
-    if element.attrib:
-        for key, value in element.attrib.items():
-            result[f"@{key}"] = value
-    
-    # Group children by tag name
+
+    # Attributes, prefixed with @ (kept as raw strings to preserve them exactly).
+    for name, value in element.attrib.items():
+        result[f"@{name}"] = value
+
+    # Group children by tag: a single child is a value, repeats become a list.
     children_by_tag: Dict[str, List[ET.Element]] = {}
-    for child in element:
-        tag = child.tag
-        if tag not in children_by_tag:
-            children_by_tag[tag] = []
-        children_by_tag[tag].append(child)
-    
-    # Process children
-    for tag, children in children_by_tag.items():
-        if len(children) == 1:
-            # Single child
-            child = children[0]
-            child_dict = _xml_to_dict(child)
-            
-            # If child has no children and no attributes, use text directly
-            if isinstance(child_dict, dict) and len(child_dict) == 1 and '#text' in child_dict:
-                result[tag] = child_dict['#text']
-            else:
-                result[tag] = child_dict
+    for child in children:
+        children_by_tag.setdefault(child.tag, []).append(child)
+    for tag, group in children_by_tag.items():
+        if len(group) == 1:
+            result[tag] = _element_to_value(group[0])
         else:
-            # Multiple children with same tag -> array
-            result[tag] = [_xml_to_dict(child) for child in children]
-    
-    # Add text content
-    if element.text and element.text.strip():
-        text = element.text.strip()
-        if not children_by_tag:
-            # Leaf node with only text
-            return text
-        else:
-            # Mixed content
-            result['#text'] = text
-    
-    # If we have a root element name, wrap it
-    if not result:
-        return None
-    
-    return {element.tag: result} if result else element.tag
+            result[tag] = [_element_to_value(child) for child in group]
+
+    # Mixed content: element has attributes/children *and* its own text.
+    if text:
+        result["#text"] = _coerce_scalar(text)
+
+    return result
 
 
 def decode(toon_text: str, root_name: str = "root") -> str:
@@ -140,36 +138,47 @@ def decode(toon_text: str, root_name: str = "root") -> str:
         ValueError: If the TOON format is invalid or cannot be parsed
     """
     # Decode TOON to dictionary
-    from . import json_to_toon
     dict_data = json_to_toon.decode(toon_text)
-    
+
     if dict_data is None:
         return f"<{root_name}/>"
-    
-    # Convert dictionary to XML
-    root = _dict_to_xml(dict_data, root_name)
-    
+
+    # The encoder wraps everything under the original root tag. Unwrap it once
+    # here (using that tag as the element name) so we don't add an extra
+    # <root> wrapper; otherwise fall back to root_name.
+    if (isinstance(dict_data, dict) and len(dict_data) == 1
+            and not next(iter(dict_data)).startswith(('@', '#'))):
+        tag = next(iter(dict_data))
+        root = _dict_to_xml(dict_data[tag], tag)
+    else:
+        root = _dict_to_xml(dict_data, root_name)
+
     # Convert to string with pretty formatting
     return _prettify_xml(root)
 
 
+def _scalar_to_text(value: Any) -> str:
+    """Render a scalar as XML text, using lowercase ``true``/``false`` for bools.
+
+    ``str(True)`` is ``"True"``, which would not survive an XML round-trip, so
+    booleans are rendered to match the TOON/XML convention.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
 def _dict_to_xml(data: Any, tag_name: str = "item") -> ET.Element:
     """
-    Convert a dictionary structure to an XML element.
-    
+    Convert a dictionary structure to an XML element named ``tag_name``.
+
     Handles:
-    - Dicts -> nested elements
-    - Lists -> repeated child elements
+    - Dicts -> nested elements (one child per key; list values repeat the tag)
+    - Lists -> repeated child elements wrapped in a ``tag_name`` container
     - Primitives -> text content
-    - @attributes -> XML attributes
+    - @attributes -> XML attributes, #text -> element text
     """
     if isinstance(data, dict):
-        # Check if there's a single key that should be the root
-        if len(data) == 1:
-            key = list(data.keys())[0]
-            if not key.startswith('@') and not key.startswith('#'):
-                return _dict_to_xml(data[key], key)
-        
         element = ET.Element(tag_name)
         
         # Process attributes first
@@ -181,10 +190,10 @@ def _dict_to_xml(data: Any, tag_name: str = "item") -> ET.Element:
             if key.startswith('@'):
                 # Attribute
                 attr_name = key[1:]
-                attributes[attr_name] = str(value)
+                attributes[attr_name] = _scalar_to_text(value)
             elif key == '#text':
                 # Text content
-                text_content = str(value)
+                text_content = _scalar_to_text(value)
             else:
                 regular_keys[key] = value
         
@@ -192,8 +201,8 @@ def _dict_to_xml(data: Any, tag_name: str = "item") -> ET.Element:
         for attr, val in attributes.items():
             element.set(attr, val)
         
-        # Set text content if present and no child elements
-        if text_content and not regular_keys:
+        # Set text content if present (mixed content keeps text before children)
+        if text_content is not None:
             element.text = text_content
         
         # Process child elements
@@ -222,7 +231,7 @@ def _dict_to_xml(data: Any, tag_name: str = "item") -> ET.Element:
         # Primitive value
         element = ET.Element(tag_name)
         if data is not None:
-            element.text = str(data)
+            element.text = _scalar_to_text(data)
         return element
 
 
@@ -281,8 +290,9 @@ def encode_file(xml_file_path: Union[str, Path], toon_file_path: Optional[Union[
     
     # Encode to TOON format
     toon_content = encode(root, indent_str=indent_str)
-    
-    # Write to TOON file
+
+    # Write to TOON file (creating the output directory if needed)
+    toon_path.parent.mkdir(parents=True, exist_ok=True)
     with open(toon_path, 'w', encoding='utf-8') as f:
         f.write(toon_content)
 
@@ -332,7 +342,8 @@ def decode_file(toon_file_path: Union[str, Path], xml_file_path: Optional[Union[
     except Exception as e:
         raise ValueError(f"Invalid TOON format in file {toon_file_path}: {str(e)}")
     
-    # Write to XML file
+    # Write to XML file (creating the output directory if needed)
+    xml_path.parent.mkdir(parents=True, exist_ok=True)
     with open(xml_path, 'w', encoding='utf-8') as f:
         f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
         f.write(xml_content)
