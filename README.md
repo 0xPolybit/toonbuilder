@@ -32,6 +32,7 @@
 - [API Reference](#api-reference)
 - [Examples](#examples)
 - [Contributing](#contributing)
+  - [Releasing](#releasing)
 - [FAQ](#faq)
 - [Acknowledgments](#acknowledgments)
 - [License](#license)
@@ -416,6 +417,23 @@ pytest
 # Quick sanity check
 python -c "from toonbuilder import json_to_toon; print(json_to_toon.encode({'test': 'data'}))"
 ```
+
+### Releasing
+
+Releases are built and published to PyPI automatically by [`.github/workflows/publish.yml`](.github/workflows/publish.yml) via [PyPI trusted publishing](https://docs.pypi.org/trusted-publishers/) — no API tokens involved. The package version is derived from the git tag at build time ([setuptools-scm](https://setuptools-scm.readthedocs.io/)), so there's no `version =` field to hand-edit.
+
+To cut a release (maintainers only):
+
+1. Make sure `main` is green and has everything you want to ship.
+2. Create and push an annotated tag matching `vMAJOR.MINOR.PATCH`, e.g.:
+   ```bash
+   git tag -a v0.3.0 -m "v0.3.0"
+   git push origin v0.3.0
+   ```
+3. On GitHub, go to **Releases → Draft a new release**, pick the tag you just pushed, add release notes, and click **Publish release**.
+4. Publishing the release triggers the workflow: it builds the sdist/wheel, verifies the metadata with `twine check`, and uploads to PyPI. Watch progress under the repo's **Actions** tab; the package will appear at [pypi.org/project/toonbuilder](https://pypi.org/project/toonbuilder/) within a couple of minutes.
+
+Every push and pull request also runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml), which tests across Python 3.9/3.11/3.12/3.14 and verifies the package builds cleanly — so packaging issues surface long before tag time.
 
 ## FAQ
 

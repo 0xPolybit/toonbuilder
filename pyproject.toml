@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=64", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "toonbuilder"
-version = "0.2.0"
+dynamic = ["version"]
 authors = [
   { name="Polybit" },
 ]
@@ -29,6 +29,12 @@ test = ["pytest"]
 
 [tool.setuptools.packages.find]
 include = ["toonbuilder*"]
+
+[tool.setuptools_scm]
+# Version is derived from git tags (e.g. tag "v0.3.0" -> version "0.3.0").
+# fallback_version keeps `pip install` working in checkouts with no tags
+# reachable (shallow clones, tarballs without .git, etc).
+fallback_version = "0.0.0"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
