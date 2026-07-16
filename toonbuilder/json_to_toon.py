@@ -6,9 +6,23 @@ TOON format back to JSON. TOON (Token-Oriented Object Notation) is a compact,
 human-readable encoding optimized for LLM token efficiency.
 """
 
+import datetime
 import json
+import re
 from pathlib import Path
 from typing import Any, List, Dict, Union, Optional
+
+# Matches exactly what date.isoformat()/time.isoformat()/datetime.isoformat()
+# produce (encode() always uses these, never a custom format), so decoding
+# with fromisoformat() is safe on every Python version this package supports.
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_TIME_RE = re.compile(r"^\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?$")
+_DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([+-]\d{2}:\d{2})?$")
+
+# Unquoted tokens that decode to a non-string value; a genuine string equal to
+# one of these (or shaped like a date/time) must be quoted on encode so it
+# round-trips as a string instead of being reinterpreted on decode.
+_SPECIAL_UNQUOTED_TOKENS = {"true", "false", "null", "{}", "[]", "nan", "inf", "-inf"}
 
 
 def encode(data: Any, indent_level: int = 0, indent_str: str = "  ") -> str:
@@ -43,6 +57,9 @@ def encode(data: Any, indent_level: int = 0, indent_str: str = "  ") -> str:
         return "true" if data else "false"
     elif isinstance(data, (int, float)):
         return str(data)
+    elif isinstance(data, (datetime.date, datetime.time)):
+        # Covers date, time, and datetime (datetime subclasses date).
+        return data.isoformat()
     elif isinstance(data, str):
         # Quote strings if they contain special characters, commas, or colons
         if _needs_quoting(data):
@@ -79,8 +96,10 @@ def _needs_quoting(s: str) -> bool:
         return True
     # Quote strings that would otherwise decode back as a non-string scalar or
     # structural token so that types survive a round-trip (e.g. "01234", "1.0",
-    # "true", "null", "{}", "[]").
-    if s in ("true", "false", "null", "{}", "[]"):
+    # "true", "null", "{}", "[]", "nan", a genuine "2024-01-15" string, etc).
+    if s in _SPECIAL_UNQUOTED_TOKENS:
+        return True
+    if _DATE_RE.match(s) or _TIME_RE.match(s) or _DATETIME_RE.match(s):
         return True
     return _parses_as_number(s)
 
@@ -257,6 +276,17 @@ def decode(toon_text: str) -> Any:
         return None
 
     lines = toon_text.split('\n')
+
+    # A single physical line that either is a quoted scalar or has no colon at
+    # all cannot be a "key: value" object line or an array header (both
+    # require a colon), so it must be a bare top-level scalar - e.g. the
+    # output of encode(42), encode("hello"), or encode(None).
+    non_blank = [line for line in lines if line.strip()]
+    if len(non_blank) == 1:
+        candidate = non_blank[0].strip()
+        if candidate.startswith('"') or ':' not in candidate:
+            return _parse_value(candidate)
+
     unit_len = _detect_indent_width(lines)
     result, _ = _parse_lines(lines, 0, 0, unit_len)
     return result
@@ -349,8 +379,11 @@ def _parse_lines(lines: List[str], start_idx: int, base_indent: int, unit_len: i
                 result[key] = _parse_value(rest)
                 idx += 1
         else:
-            idx += 1
-    
+            raise ValueError(
+                f"Invalid TOON syntax at line {idx + 1}: expected 'key: value' "
+                f"but got {line_content!r}"
+            )
+
     return result, idx
 
 
@@ -400,12 +433,23 @@ def _parse_tabular_array(lines: List[str], start_idx: int, base_indent: int, uni
 
         if indent == row_indent:
             values = _parse_csv_line(line.strip())
-            if len(values) == len(fields):
-                row_dict = {fields[i]: _parse_value(values[i]) for i in range(len(fields))}
-                result.append(row_dict)
-        
+            if len(values) != len(fields):
+                raise ValueError(
+                    f"Invalid TOON syntax at line {idx + 1}: expected {len(fields)} "
+                    f"comma-separated value(s) for fields {fields} but got "
+                    f"{len(values)}: {line.strip()!r}"
+                )
+            row_dict = {fields[i]: _parse_value(values[i]) for i in range(len(fields))}
+            result.append(row_dict)
+
         idx += 1
-    
+
+    if len(result) != expected_length:
+        raise ValueError(
+            f"Invalid TOON syntax: tabular array {header_line!r} declared "
+            f"{expected_length} row(s) but found {len(result)}"
+        )
+
     return result, idx
 
 
@@ -508,6 +552,17 @@ def _parse_value(value_str: str) -> Any:
         return {}
     elif value_str == "[]":
         return []
+    elif value_str in ("nan", "inf", "-inf"):
+        return float(value_str)
+
+    # Reconstruct date/time/datetime values (symmetric with encode()'s
+    # isoformat() output; see _DATE_RE / _TIME_RE / _DATETIME_RE above).
+    if _DATETIME_RE.match(value_str):
+        return datetime.datetime.fromisoformat(value_str)
+    if _DATE_RE.match(value_str):
+        return datetime.date.fromisoformat(value_str)
+    if _TIME_RE.match(value_str):
+        return datetime.time.fromisoformat(value_str)
 
     # Try to parse as number (kept symmetric with _parses_as_number / _needs_quoting)
     if _parses_as_number(value_str):

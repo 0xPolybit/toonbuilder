@@ -5,7 +5,9 @@ in 0.2.0 (lossless quoting, tabular-safety, indentation-aware decoding and
 round-tripping of non-tabular arrays).
 """
 
+import datetime
 import json
+import math
 
 import pytest
 
@@ -145,6 +147,90 @@ def test_custom_indent_round_trip(indent_str):
 ])
 def test_special_string_round_trip(value):
     rt({"k": value})
+
+
+# --------------------------------------------------------------------------- #
+# Regression: bare top-level scalars round-trip (previously decoded to {})
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize("value", [
+    "hello", 42, 3.14, True, False, None, {}, [], "a:b", "01234",
+])
+def test_top_level_scalar_round_trip(value):
+    rt(value)
+
+
+# --------------------------------------------------------------------------- #
+# Regression: date/time/datetime round-trip; date-like strings stay strings
+# --------------------------------------------------------------------------- #
+
+def test_datetime_round_trip():
+    data = {
+        "updated": datetime.datetime(2024, 1, 15, 7, 32, 0),
+        "day": datetime.date(2024, 1, 15),
+        "t": datetime.time(7, 32, 0),
+    }
+    rt(data)
+    decoded = json_to_toon.decode(json_to_toon.encode(data))
+    assert isinstance(decoded["updated"], datetime.datetime)
+    assert isinstance(decoded["day"], datetime.date)
+    assert isinstance(decoded["t"], datetime.time)
+
+
+def test_datetime_with_offset_round_trip():
+    aware = datetime.datetime(1979, 5, 27, 7, 32, 0,
+                               tzinfo=datetime.timezone(datetime.timedelta(hours=-8)))
+    rt({"updated": aware})
+
+
+def test_date_like_strings_stay_strings():
+    # A genuine string that happens to look like a date/time must NOT be
+    # reinterpreted as a datetime object on decode.
+    data = {"note": "2024-01-15", "label": "07:32:00"}
+    decoded = json_to_toon.decode(json_to_toon.encode(data))
+    assert decoded == data
+    assert isinstance(decoded["note"], str) and isinstance(decoded["label"], str)
+
+
+# --------------------------------------------------------------------------- #
+# Regression: NaN / Infinity round-trip; "nan"/"inf" strings stay strings
+# --------------------------------------------------------------------------- #
+
+def test_nan_and_infinity_round_trip():
+    data = {"x": float("nan"), "y": float("inf"), "z": float("-inf")}
+    encoded = json_to_toon.encode(data)
+    decoded = json_to_toon.decode(encoded)
+    assert math.isnan(decoded["x"])
+    assert decoded["y"] == float("inf")
+    assert decoded["z"] == float("-inf")
+
+
+def test_nan_like_strings_stay_strings():
+    data = {"s": "nan", "t": "inf", "u": "-inf"}
+    decoded = json_to_toon.decode(json_to_toon.encode(data))
+    assert decoded == data
+    assert all(isinstance(v, str) for v in decoded.values())
+
+
+# --------------------------------------------------------------------------- #
+# Regression: decode raises ValueError on malformed input instead of
+# silently returning wrong/partial data
+# --------------------------------------------------------------------------- #
+
+def test_decode_raises_on_unparseable_object_line():
+    with pytest.raises(ValueError):
+        json_to_toon.decode("not a valid line\nanother bad line without structure")
+
+
+def test_decode_raises_on_tabular_length_mismatch():
+    # Header declares 5 rows but only 2 are present.
+    with pytest.raises(ValueError):
+        json_to_toon.decode("users[5]{id,name}:\n  1,Alice\n  2,Bob")
+
+
+def test_decode_raises_on_tabular_field_count_mismatch():
+    with pytest.raises(ValueError):
+        json_to_toon.decode("users[2]{id,name}:\n  1,Alice\n  2,Bob,extra")
 
 
 # --------------------------------------------------------------------------- #

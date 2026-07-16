@@ -59,6 +59,26 @@ def test_decode_empty_returns_empty_string():
 
 
 @requires_parser
+def test_datetime_survives_as_native_toml_datetime():
+    # Regression: datetimes previously round-tripped through the TOON codec
+    # as plain strings, so the regenerated TOML re-typed the field as a
+    # quoted string literal instead of a native datetime.
+    pytest.importorskip("toml")  # decode side needs the dumper
+    toml_text = (
+        'title = "Example"\n'
+        "updated = 1979-05-27T07:32:00-08:00\n"
+        "day = 1979-05-27\n"
+    )
+    toon = toml_to_toon.encode(toml_text)
+    assert '"1979-05-27' not in toon  # must be unquoted (a real datetime, not a string)
+
+    restored = toml_to_toon.decode(toon)
+    assert "updated = 1979-05-27T07:32:00-08:00" in restored
+    assert "day = 1979-05-27" in restored
+    assert 'updated = "' not in restored  # must not have been re-typed as a string
+
+
+@requires_parser
 def test_encode_decode_file_round_trip(tmp_path):
     pytest.importorskip("toml")  # decode side needs the dumper
     toml_path = tmp_path / "data.toml"
