@@ -28,6 +28,9 @@ test = ["pytest"]
 "Homepage" = "https://github.com/0xPolybit/toonbuilder"
 "Bug Tracker" = "https://github.com/0xPolybit/toonbuilder/issues"
 
+[project.scripts]
+toon = "toonbuilder.cli:main"
+
 [tool.setuptools.packages.find]
 include = ["toonbuilder*"]
 

@@ -28,6 +28,7 @@
 - [Features](#features)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Command-Line Interface](#command-line-interface)
 - [Usage](#usage)
 - [Type Handling](#type-handling)
 - [API Reference](#api-reference)
@@ -221,6 +222,31 @@ json_to_toon.decode_file("output.toon", "restored.json")
 xml_to_toon.encode_file("input.xml", "output.toon")
 xml_to_toon.decode_file("output.toon", "restored.xml")
 ```
+
+## Command-Line Interface
+
+Installing `toonbuilder` also installs a `toon` command for converting files without writing any Python (also runnable as `python -m toonbuilder`).
+
+```bash
+# Encode: JSON/XML/TOML -> TOON. Input format is inferred from the
+# extension; output defaults to a sibling .toon file.
+toon encode data.json                  # writes data.toon
+toon encode config.xml -o out.toon     # explicit output path
+toon encode data.json --indent tab     # tabs instead of two spaces
+
+# Decode: TOON -> JSON/XML/TOML. Output format is inferred from -o's
+# extension, from --to, or defaults to json.
+toon decode data.toon                  # writes data.json
+toon decode data.toon --to xml         # writes data.xml
+toon decode data.toon -o out.toml      # format inferred as toml
+
+# Read from stdin / write to stdout by using '-' or omitting a path.
+# --from is required when encoding from stdin (there's no extension to infer from).
+cat data.json | toon encode --from json > data.toon
+toon decode data.toon --to xml -o -
+```
+
+Run `toon --help`, `toon encode --help`, or `toon decode --help` for the full flag reference, including `--indent` (JSON output indentation on decode) and `--root-name` (XML root element name when the TOON data isn't already wrapped under one key).
 
 ## Usage
 

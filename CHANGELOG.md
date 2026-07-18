@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A `toon` command-line interface (`toon encode` / `toon decode`), installed automatically with the package and also runnable as `python -m toonbuilder`. Supports reading/writing files or stdin/stdout, input/output format auto-detection from file extensions, custom indentation, and XML root-element naming. See the README's [Command-Line Interface](README.md#command-line-interface) section.
 - TOML support: a new `toml_to_toon` module with `encode`, `decode`, `encode_file`, and `decode_file`, mirroring the existing JSON/XML API. Parses via the standard-library `tomllib` on Python 3.11+; the optional `toml` package is needed on older Pythons or to serialize TOON back to TOML (`pip install "toonbuilder[toml]"`).
 - Automated PyPI publishing via GitHub Actions, using [trusted publishing](https://docs.pypi.org/trusted-publishers/) (OIDC) — no stored API tokens.
 - A CI workflow that runs the test suite across Python 3.9/3.11/3.12/3.14 and verifies the package builds cleanly on every push and pull request.
