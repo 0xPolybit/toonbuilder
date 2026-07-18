@@ -15,6 +15,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
+    "Typing :: Typed",
 ]
 
 [project.optional-dependencies]
@@ -29,6 +30,9 @@ test = ["pytest"]
 
 [tool.setuptools.packages.find]
 include = ["toonbuilder*"]
+
+[tool.setuptools.package-data]
+toonbuilder = ["py.typed"]
 
 [tool.setuptools_scm]
 # Version is derived from git tags (e.g. tag "v0.3.0" -> version "0.3.0").
