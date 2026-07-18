@@ -122,7 +122,7 @@ pip install "toonbuilder[toml]"
 
 ### Requirements
 
-- **Python 3.7+**
+- **Python 3.9+**
 - JSON and XML conversion require **no external dependencies** (standard library only).
 - TOML conversion parses with the standard-library `tomllib` on **Python 3.11+**. On older Pythons, or to serialize TOON *back* to TOML, install the optional `toml` package (`pip install "toonbuilder[toml]"`).
 
