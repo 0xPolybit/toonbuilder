@@ -14,6 +14,7 @@
     <a href="https://github.com/0xPolybit/toonbuilder/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License: MIT"></a>
     <a href="https://pypi.org/project/toonbuilder/"><img src="https://img.shields.io/pypi/dm/toonbuilder.svg?color=orange" alt="Downloads"></a>
     <a href="https://github.com/0xPolybit/toonbuilder/stargazers"><img src="https://img.shields.io/github/stars/0xPolybit/toonbuilder.svg?style=social" alt="GitHub stars"></a>
+    <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/changelog-keep--a--changelog-blue.svg" alt="Changelog"></a>
 </p>
 
 > [!NOTE]
@@ -425,13 +426,14 @@ Releases are built and published to PyPI automatically by [`.github/workflows/pu
 To cut a release (maintainers only):
 
 1. Make sure `main` is green and has everything you want to ship.
-2. Create and push an annotated tag matching `vMAJOR.MINOR.PATCH`, e.g.:
+2. Move [`CHANGELOG.md`](CHANGELOG.md)'s `[Unreleased]` entries under a new `## [MAJOR.MINOR.PATCH] - YYYY-MM-DD` heading and commit it.
+3. Create and push an annotated tag matching `vMAJOR.MINOR.PATCH`, e.g.:
    ```bash
    git tag -a v0.3.0 -m "v0.3.0"
    git push origin v0.3.0
    ```
-3. On GitHub, go to **Releases → Draft a new release**, pick the tag you just pushed, add release notes, and click **Publish release**.
-4. Publishing the release triggers the workflow: it builds the sdist/wheel, verifies the metadata with `twine check`, and uploads to PyPI. Watch progress under the repo's **Actions** tab; the package will appear at [pypi.org/project/toonbuilder](https://pypi.org/project/toonbuilder/) within a couple of minutes.
+4. On GitHub, go to **Releases → Draft a new release**, pick the tag you just pushed, paste the matching CHANGELOG section as the release notes, and click **Publish release**.
+5. Publishing the release triggers the workflow: it builds the sdist/wheel, verifies the metadata with `twine check`, and uploads to PyPI. Watch progress under the repo's **Actions** tab; the package will appear at [pypi.org/project/toonbuilder](https://pypi.org/project/toonbuilder/) within a couple of minutes.
 
 Every push and pull request also runs [`.github/workflows/ci.yml`](.github/workflows/ci.yml), which tests across Python 3.9/3.11/3.12/3.14 and verifies the package builds cleanly — so packaging issues surface long before tag time.
 
